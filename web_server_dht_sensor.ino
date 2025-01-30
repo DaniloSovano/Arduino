@@ -1,10 +1,9 @@
 #include <ESP8266WiFi.h>
 #include <DHT.h>
 
-#ifndef STASSID
 #define STASSID "LAAI"
 #define STAPSK "laaiufpa2023"
-#endif
+
 
 const char* ssid = STASSID;
 const char* password = STAPSK;
@@ -17,6 +16,76 @@ DHT dht(DHTPIN, DHTTYPE);
 
 // Cria o servidor na porta 80
 WiFiServer server(80);
+  
+const char htmlpage[] = R"(
+HTTP/1.1 200 OK
+Content-Type: text/html; charset=UTF-8
+
+<!DOCTYPE HTML>
+<html>
+<head>
+    <style>
+        body {
+            background-color: #111111;
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 60px;
+        }
+        h1 {
+            color: #9966CB;
+            font-size: 50px;
+        }
+        p {
+            font-size: 45px;
+            color: #cccccc;
+            font-weight: bold;
+        }
+        span {
+            font-size: 40px;
+            color: #cccccc;
+        }
+    </style>
+</head>
+<body>
+    <h1>DHT Sensor</h1>
+    <p>Temperature: <span id='temperature'>--</span> °C</p>
+    <p>Humidity: <span id='humidity'>--</span> %</p>
+    <script>
+        function fetchData() {
+            fetch('/data').then(response => response.json()).then(data => {
+                const temperature = data.temperature;
+                const humidity = data.humidity;
+
+                // Atualiza a temperatura e umidade na página
+                document.getElementById('temperature').innerHTML = temperature;
+                document.getElementById('humidity').innerHTML = humidity;
+
+                // Altera a cor da temperatura
+                const tempSpan = document.getElementById('temperature');
+                if (temperature < 20) {
+                    tempSpan.style.color = '#1E90FF';  // Azul (frio)
+                } else if (temperature >= 20 && temperature <= 25) {
+                    tempSpan.style.color = '#32CD32';  // Verde (ideal)
+                } else {
+                    tempSpan.style.color = '#FF6347';  // Vermelho (quente)
+                }
+
+                // Altera a cor da umidade
+                const humiditySpan = document.getElementById('humidity');
+                if (humidity < 30) {
+                    humiditySpan.style.color = '#FF6347';  // Vermelho (muito seco)
+                } else if (humidity >= 30 && humidity <= 60) {
+                    humiditySpan.style.color = '#32CD32';  // Verde (ideal)
+                } else {
+                    humiditySpan.style.color = '#1E90FF';  // Azul (muito úmido)
+                }
+            });
+        }
+        setInterval(fetchData, 5000);  // Atualiza os dados a cada 5 segundos
+    </script>
+</body>
+</html>)";
+
 
 void setup() {
   Serial.begin(9600);
@@ -84,48 +153,8 @@ void loop() {
     client.print(humidity);
     client.print(F("}"));
   }else{
-
- // Envia a página HTML
-client.print(F("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n"));
-client.print(F("<!DOCTYPE HTML>\r\n<html>\r\n"));
-client.print(F("<head>\r\n"));
-client.print(F("<style>\r\n"));
-client.print(F("body {\r\n"));
-client.print(F("  background-color: #f0f8ff;\r\n"));
-client.print(F("  font-family: Arial, sans-serif;\r\n"));
-client.print(F("  text-align: center;\r\n"));
-client.print(F("  padding: 60px;\r\n"));
-client.print(F("}\r\n"));
-client.print(F("h1 {\r\n"));
-client.print(F("  color: #9966CB;\r\n"));
-client.print(F("  font-size: 50px;/r/n"));
-client.print(F("}\r\n"));
-client.print(F("p {\r\n"));
-client.print(F("  font-size: 45px;\r\n"));
-client.print(F("  color: #333;\r\n"));
-client.print(F("  font-weight: bold;\r\n"));
-client.print(F("}\r\n"));
-client.print(F("span {\r\n"));
-client.print(F("  font-size: 40px;\r\n"));
-client.print(F("  color: #FF6347;\r\n"));
-client.print(F("}\r\n"));
-client.print(F("</style>\r\n"));
-client.print(F("</head>\r\n"));
-client.print(F("<body>\r\n"));
-client.print(F("<h1>DHT Sensor</h1>"));
-client.print(F("<p>Temperature: <span id='temperature'>--</span> °C</p>"));
-client.print(F("<p>Humidity: <span id='humidity'>--</span> %</p>"));
-client.print(F("<script>\r\n"));
-client.print(F("function fetchData() {\r\n"));
-client.print(F("  fetch('/data').then(response => response.json()).then(data => {\r\n"));
-client.print(F("    document.getElementById('temperature').innerHTML = data.temperature;\r\n"));
-client.print(F("    document.getElementById('humidity').innerHTML = data.humidity;\r\n"));
-client.print(F("  });\r\n"));
-client.print(F("}\r\n"));
-client.print(F("setInterval(fetchData, 5000); // Fetch data every 5 seconds\r\n"));
-client.print(F("</script>\r\n"));
-client.print(F("</body>\r\n"));
-client.print(F("</html>"));
+  // Envia a página HTML
+  client.print(htmlpage);
   
 
 
