@@ -18,9 +18,6 @@ DHT dht(DHTPIN, DHTTYPE);
 WiFiServer server(80);
   
 const char htmlpage[] = R"(
-HTTP/1.1 200 OK
-Content-Type: text/html; charset=UTF-8
-
 <!DOCTYPE HTML>
 <html>
 <head>
@@ -154,6 +151,7 @@ void loop() {
     client.print(F("}"));
   }else{
   // Envia a página HTML
+  client.print("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n");
   client.print(htmlpage);
   
 
