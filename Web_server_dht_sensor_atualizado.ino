@@ -156,7 +156,7 @@ void setup() {
   WiFiManagerParameter User_name("Nome", "Usuario", nome, 20);
   
   WiFiManager wifiManager;
-  wifiManager.resetSettings();
+  //wifiManager.resetSettings();
   
   wifiManager.setSaveConfigCallback(saveConfigCallback);
   wifiManager.addParameter(&User_name);
