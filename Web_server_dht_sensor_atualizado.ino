@@ -80,7 +80,7 @@ const char htmlpage[] = R"(
                 }
             });
         }
-        setInterval(fetchData, 5000);  // Atualiza os dados a cada 5 segundos
+        setInterval(fetchData, 3000);  // Atualiza os dados a cada 3 segundos
     </script>
 </body>
 </html>)";
@@ -135,17 +135,11 @@ void setup() {
 
         configFile.readBytes(buf.get(), size);
 
-#if defined(ARDUINOJSON_VERSION_MAJOR) && ARDUINOJSON_VERSION_MAJOR >= 6
+
         DynamicJsonDocument json(1024);
         auto deserializeError = deserializeJson(json, buf.get());
         serializeJson(json, Serial);
         if ( ! deserializeError ) {
-#else
-        DynamicJsonBuffer jsonBuffer;
-        JsonObject& json = jsonBuffer.parseObject(buf.get());
-        json.printTo(Serial);
-        if (json.success()) {
-#endif
           Serial.println("\nparsed json");
           strcpy(nome, json["Nome"]);
         } else {
@@ -162,7 +156,7 @@ void setup() {
   WiFiManagerParameter User_name("Nome", "Usuario", nome, 20);
   
   WiFiManager wifiManager;
-  // wifiManager.resetSettings();
+  wifiManager.resetSettings();
   
   wifiManager.setSaveConfigCallback(saveConfigCallback);
   wifiManager.addParameter(&User_name);
@@ -183,27 +177,18 @@ void setup() {
 
 if (shouldSaveConfig) {
     Serial.println("saving config");
- #if defined(ARDUINOJSON_VERSION_MAJOR) && ARDUINOJSON_VERSION_MAJOR >= 6
+ 
     DynamicJsonDocument json(1024);
-#else
-    DynamicJsonBuffer jsonBuffer;
-    JsonObject& json = jsonBuffer.createObject();
-#endif
     json["Nome"] = nome;
-  //if you get here you have connected to the WiFi
 
     File configFile = SPIFFS.open("/config.json", "w");
     if (!configFile) {
       Serial.println("failed to open config file for writing");
     }
 
-#if defined(ARDUINOJSON_VERSION_MAJOR) && ARDUINOJSON_VERSION_MAJOR >= 6
     serializeJson(json, Serial);
     serializeJson(json, configFile);
-#else
-    json.printTo(Serial);
-    json.printTo(configFile);
-#endif
+
     configFile.close();
     //end save
   }
@@ -211,13 +196,11 @@ if (shouldSaveConfig) {
     digitalWrite(LED_BUILTIN, LOW); // LED indica que a conexão foi bem-sucedida
 
     server.on("/data", Data);
-    digitalWrite(LED_BUILTIN,HIGH);
     server.on("/", Root);
     server.begin();
     Serial.println("Server started");
-    Serial.println(WiFi.localIP());
-    digitalWrite(LED_BUILTIN,LOW);
-    
+    digitalWrite(LED_BUILTIN,HIGH);
+    Serial.println(WiFi.localIP());    
 }
 
 
