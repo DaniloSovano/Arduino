@@ -1,21 +1,23 @@
-#include <FS.h>                  
-#include <WiFiManager.h>         
-#include <ArduinoJson.h>    
-#include <DHT.h>
-#include <ESP8266WebServer.h>
+/* Programa que efetua a leitura de um sensor DHT e envia para o servidor MQTT Broker
+   Desenvolvido por Danilo Sovano */
 
+#include <FS.h>                    // https://github.com/esp8266/Arduino
+#include <WiFiManager.h>           // https://github.com/tzapu/WiFiManager
+#include <ArduinoJson.h>           // https://github.com/bblanchon/ArduinoJson
+#include <DHT.h>                   // https://github.com/adafruit/DHT-sensor-library
+#include <ESP8266WebServer.h>      // https://github.com/esp8266/Arduino
 
-#define DHTPIN D2      // pin ao qual o dht 11 está conectado
-#define DHTTYPE DHT11  // Define o tipo de dht conectado
+#define DHTPIN D2      // Define o pino ao qual o sensor DHT11 está conectado
+#define DHTTYPE DHT11  // Define o tipo do sensor DHT
 
-DHT dht(DHTPIN, DHTTYPE);
+DHT dht(DHTPIN, DHTTYPE);  // Cria a instancia do objeto DHT
+ESP8266WebServer server(80); // Cria um servidor web na porta 80
 
-// Cria o servidor na porta 80
-ESP8266WebServer server(80);
+bool shouldSaveConfig = false; // Flag para verificar se a configuração deve ser salva
 
-bool shouldSaveConfig = false;
-void saveConfigCallback(); 
+char nome[20];  // Variável para armazenar o nome do usuário
 
+// Página HTML que será servida pelo ESP8266
 const char htmlpage[] = R"(
 <!DOCTYPE HTML>
 <html>
@@ -50,168 +52,96 @@ const char htmlpage[] = R"(
     <script>
         function fetchData() {
             fetch('/data').then(response => response.json()).then(data => {
-                const temperature = data.temperature;
-                const humidity = data.humidity;
-                const nome = data.nome;
-
-                // Atualiza a temperatura e umidade na página
-                document.getElementById('temperature').innerHTML = temperature;
-                document.getElementById('humidity').innerHTML = humidity;
-                document.getElementById('Nome').innerHTML = nome;
-
-                // Altera a cor da temperatura
-                const tempSpan = document.getElementById('temperature');
-                if (temperature < 20) {
-                    tempSpan.style.color = '#1E90FF';  // Azul (frio)
-                } else if (temperature >= 20 && temperature <= 25) {
-                    tempSpan.style.color = '#32CD32';  // Verde (ideal)
-                } else {
-                    tempSpan.style.color = '#FF6347';  // Vermelho (quente)
-                }
-
-                // Altera a cor da umidade
-                const humiditySpan = document.getElementById('humidity');
-                if (humidity < 30) {
-                    humiditySpan.style.color = '#FF6347';  // Vermelho (muito seco)
-                } else if (humidity >= 30 && humidity <= 60) {
-                    humiditySpan.style.color = '#32CD32';  // Verde (ideal)
-                } else {
-                    humiditySpan.style.color = '#1E90FF';  // Azul (muito úmido)
-                }
+                document.getElementById('temperature').innerHTML = data.temperature;
+                document.getElementById('humidity').innerHTML = data.humidity;
+                document.getElementById('Nome').innerHTML = data.nome;
             });
         }
-        setInterval(fetchData, 3000);  // Atualiza os dados a cada 3 segundos
+        setInterval(fetchData, 3000); // Atualiza os dados a cada 3 segundos
     </script>
 </body>
 </html>)";
 
-char nome[20];
-
+// Função que retorna os dados do sensor DHT
 void Data() {
-    float temperature = dht.readTemperature();
-    float humidity = dht.readHumidity();
-
-    if (isnan(temperature) || isnan(humidity)) {
+    float temperature = dht.readTemperature(); // Lê a temperatura
+    float humidity = dht.readHumidity(); // Lê a umidade
+    
+    // Verifica se houve erro na leitura
+    if (isnan(temperature) || isnan(humidity)) { 
         server.send(500, "application/json", R"({"error":"Failed to read from DHT sensor"})");
         return;
     }
 
-
-    String jsonResponse = "{\"temperature\": " + String(temperature, 1) + 
-                          ", \"humidity\": " + String(humidity, 1) + 
-                          ", \"nome\": \"" + String(nome) + "\"}";
-
+    // Cria um JSON com os dados
+    char jsonResponse[100];
+    snprintf(jsonResponse, sizeof(jsonResponse), "{\"temperature\": %.1f, \"humidity\": %.1f, \"nome\": \"%s\"}", temperature, humidity, nome);
     server.send(200, "application/json", jsonResponse);
 }
 
-
+// Função que serve a página HTML principal
 void Root() {
     server.send(200, "text/html; charset=UTF-8", htmlpage);
 }
 
 void setup() {
     Serial.begin(115200);
-    Serial.println();
-    // SPIFFS.format();
-    
-    dht.begin();
+    dht.begin(); // Inicializa o sensor DHT
     pinMode(LED_BUILTIN, OUTPUT);
-    digitalWrite(LED_BUILTIN, HIGH); // LED indica que está conectando
+    digitalWrite(LED_BUILTIN, HIGH);
 
- //read configuration from FS json
-  Serial.println("mounting FS...");
-
-  if (SPIFFS.begin()) {
-    Serial.println("mounted file system");
-    if (SPIFFS.exists("/config.json")) {
-      //file exists, reading and loading
-      Serial.println("reading config file");
-      File configFile = SPIFFS.open("/config.json", "r");
-      if (configFile) {
-        Serial.println("opened config file");
-        size_t size = configFile.size();
-        // Allocate a buffer to store contents of the file.
-        std::unique_ptr<char[]> buf(new char[size]);
-
-        configFile.readBytes(buf.get(), size);
-
-
-        DynamicJsonDocument json(1024);
-        auto deserializeError = deserializeJson(json, buf.get());
-        serializeJson(json, Serial);
-        if ( ! deserializeError ) {
-          Serial.println("\nparsed json");
-          strcpy(nome, json["Nome"]);
-        } else {
-          Serial.println("failed to load json config");
+    // Inicializa o sistema de arquivos e carrega a configuração dos paremetros do Wifi Manager
+    if (SPIFFS.begin()) {
+        if (SPIFFS.exists("/config.json")) {
+            File configFile = SPIFFS.open("/config.json", "r");
+            if (configFile) {
+                size_t size = configFile.size();
+                std::unique_ptr<char[]> buf(new char[size]);
+                configFile.readBytes(buf.get(), size);
+                DynamicJsonDocument json(1024);
+                if (!deserializeJson(json, buf.get())) {
+                    strcpy(nome, json["Nome"]);
+                }
+                configFile.close();
+            }
         }
-        configFile.close();
-      }
     }
-  } else {
-    Serial.println("failed to mount FS");
-  }
-   
-   
-  WiFiManagerParameter User_name("Nome", "Usuario", nome, 20);
-  
-  WiFiManager wifiManager;
-  //wifiManager.resetSettings();
-  
-  wifiManager.setSaveConfigCallback(saveConfigCallback);
-  wifiManager.addParameter(&User_name);
 
-  
-  if (!wifiManager.autoConnect("Esp8266")) {
-      Serial.println("failed to connect and hit timeout");
-      delay(3000);
-      //reset and try again, or maybe put it to deep sleep
-      ESP.restart();
-      delay(5000);
-    }
+    // Configuração do WiFiManager
+    WiFiManagerParameter User_name("Nome", "Usuário", nome, sizeof(nome)); // Adiciona um paremetro para obter o nome do usuário
+    WiFiManager wifiManager;
+    wifiManager.setSaveConfigCallback(saveConfigCallback);
+    wifiManager.addParameter(&User_name);
     
-  strcpy(nome, User_name.getValue());
-  Serial.println("O nome do usuario é: ");
-  Serial.println("nome: " + String(nome));
-
-
-if (shouldSaveConfig) {
-    Serial.println("saving config");
- 
-    DynamicJsonDocument json(1024);
-    json["Nome"] = nome;
-
-    File configFile = SPIFFS.open("/config.json", "w");
-    if (!configFile) {
-      Serial.println("failed to open config file for writing");
+    if (!wifiManager.autoConnect("ESP8266")) {
+        ESP.restart(); // Reinicia o ESP caso não consiga conectar ao WiFi
     }
 
-    serializeJson(json, Serial);
-    serializeJson(json, configFile);
+    strcpy(nome, User_name.getValue()); // Atualiza o nome com o valor fornecido pelo usuário
+    
+    // Salva a configuração caso necessário
+    if (shouldSaveConfig) {
+        DynamicJsonDocument json(1024);
+        json["Nome"] = nome;
+        File configFile = SPIFFS.open("/config.json", "w");
+        if (configFile) {
+            serializeJson(json, configFile);
+            configFile.close();
+        }
+    }
 
-    configFile.close();
-    //end save
-  }
-
-    digitalWrite(LED_BUILTIN, LOW); // LED indica que a conexão foi bem-sucedida
-
-    server.on("/data", Data);
-    server.on("/", Root);
+    digitalWrite(LED_BUILTIN, LOW);
+    server.on("/data", Data); // Configura rota para dados do sensor
+    server.on("/", Root); // Configura rota principal
     server.begin();
-    Serial.println("Server started");
-    digitalWrite(LED_BUILTIN,HIGH);
-    Serial.println(WiFi.localIP());    
+    Serial.println("Servidor iniciado.");
 }
-
 
 void loop() {
-    server.handleClient();
+    server.handleClient(); // Mantém o servidor rodando
 }
 
-
-void saveConfigCallback () {
-  Serial.println("Should save config");
-  shouldSaveConfig = true;
+// Callback para salvar configuração do WiFiManager
+void saveConfigCallback() {
+    shouldSaveConfig = true;
 }
-
-
