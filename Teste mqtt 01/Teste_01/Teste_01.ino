@@ -4,10 +4,10 @@
 #include <DHT.h>                   
 #include <PubSubClient.h>          
 
-#define MQTTBroker   "test.mosquitto.org"
+#define MQTTBroker   "broker.emqx.io"
 #define MQTTPORT     1883
 #define TOPIC_DATA   "esp8266/sensor_data"
-
+#define client_id    "mqttx_80f29a63"
 #define DHTPIN D2      
 #define DHTTYPE DHT11  
 
@@ -18,7 +18,7 @@ PubSubClient client(espClient);
 void reconnect() {
     while (!client.connected()) {
         Serial.print("Conectando ao MQTT...");
-        if (client.connect("BlHnSHIaL0")) {
+        if (client.connect(client_id)) {
             Serial.println("Conectado!");
         } else {
             Serial.print("Falha, rc=");
@@ -36,7 +36,7 @@ void sendMQTTData(float temperature, float humidity) {
 
     char payload[200];
     snprintf(payload, sizeof(payload), 
-        "{\"temperature\": %.2f, \"humidity\": %.2f}}", 
+        "{\"temperature\": %.2f, \"humidity\": %.2f}", 
         temperature, humidity);
     Serial.println(payload);
     client.publish(TOPIC_DATA, payload);
@@ -50,6 +50,7 @@ void setup() {
     digitalWrite(LED_BUILTIN, HIGH);
     
     WiFiManager wifiManager;
+    // wifiManager.resetSettings();
     if (!wifiManager.autoConnect("ESP8266")) {
         ESP.restart();
     }
