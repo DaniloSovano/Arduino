@@ -48,7 +48,7 @@ const char serverIndex[] PROGMEM = R"(
             color: #9966CB;
             font-size: 50px;
         }
-        h2{/home/danilo_sovano/Repositorio gt/ds18b20_MQTT_sensor/ds18b20_MQTT_sensor.ino
+        h2{
           color: white
 
         }
