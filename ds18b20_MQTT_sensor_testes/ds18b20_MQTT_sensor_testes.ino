@@ -11,13 +11,13 @@
 
 // *********************************************** BIBLIOTECAS *********************************************
 #include <Arduino.h>
-#include <FS.h>
+#include <SPIFFS.h>
 #include <ArduinoJson.h>
 #include <WiFiManager.h>
 #include <PubSubClient.h>
 #include <DallasTemperature.h>
-#include <ESP8266WebServer.h>
-#include <Updater.h>
+#include <WebServer.h>
+#include <Update.h>
 
 // *********************************************** ALIAS ***************************************************
 using charArray = std::shared_ptr<char[]>;
@@ -93,7 +93,7 @@ const char serverIndex[] PROGMEM = R"(
 )";
 const char* mqttClientId = "esp8266_01";
 const char* TopicReset = "esp8266_01/reset";
-const int ONE_WIRE_BUS = D4;
+const int ONE_WIRE_BUS = 4;
 File configFile;
 
 bool shouldSaveConfig = false;
@@ -106,7 +106,7 @@ WiFiManager wifiManager;
 
 WiFiClient espWifiClient;
 PubSubClient mqttClient(espWifiClient);
-ESP8266WebServer server(80);
+WebServer server(80);
 
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature ds18b20(&oneWire);
@@ -279,7 +279,7 @@ void setUpAP() {
   wifiManager.addParameter(&Interval);
 
 
-  if (!wifiManager.autoConnect("ESP8266")) {
+  if (!wifiManager.autoConnect("ESP32")) {
     ESP.restart();
   }
 
