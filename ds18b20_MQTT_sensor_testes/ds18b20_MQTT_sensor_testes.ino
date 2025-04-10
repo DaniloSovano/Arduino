@@ -2,22 +2,22 @@
  * Programa que efetua a leitura de um sensor de temperatura DS18B20 e envia para o servidor MQTT Broker.
  * Desenvolvido por Tiago Oliveira, Danilo Sovano e Dionne Monteiro.
  * Data: 04/03/2025
- * Atualizado em: 05/03/2025
+ * Atualizado em: 01/04/2025
  * 
  * Para alterar as configurações de WiFI e Servidor MQTT, acesse o AP (Access Point) no seu dispositivo.
  * Para alterar o pino de sinal do Sensor DS18b20, troque o valor da variável ONE_WIRE_BUS
- * Branch: Main
+ * Branch: Feat_OTA
  * */
 
 // *********************************************** BIBLIOTECAS *********************************************
 #include <Arduino.h>
-#include <FS.h>
+#include <SPIFFS.h>
 #include <ArduinoJson.h>
 #include <WiFiManager.h>
 #include <PubSubClient.h>
 #include <DallasTemperature.h>
-#include <ESP8266WebServer.h>
-#include <Updater.h>
+#include <WebServer.h>
+#include <Update.h>
 
 // *********************************************** ALIAS ***************************************************
 using charArray = std::shared_ptr<char[]>;
@@ -32,7 +32,7 @@ char delayStr[10];
 
 
 const char serverIndex[] PROGMEM = R"(
-  <<!DOCTYPE HTML>
+<!DOCTYPE HTML>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
@@ -48,9 +48,9 @@ const char serverIndex[] PROGMEM = R"(
             color: #9966CB;
             font-size: 50px;
         }
-        h2{
-          color: white
-
+        h2 {
+            color: white;
+            font-size: 30px;
         }
         p {
             font-size: 45px;
@@ -77,13 +77,13 @@ const char serverIndex[] PROGMEM = R"(
             margin-top: 10px;
         }
         input[type="submit"]:hover {
-            background-color: #7748A6; /* Tom mais escuro ao passar o mouse */
+            background-color: #7748A6; 
         }
     </style>
 </head>
 <body>
     <h1>Atualização de Firmware</h1>
-    <h2>Escolha um arquivo .bin </h2>
+    <h2>Escolha um arquivo .bin</h2>
     <form method="POST" action="/update" enctype="multipart/form-data">
         <input type="file" name="update">
         <input type="submit" value="Atualizar Firmware">
@@ -93,7 +93,7 @@ const char serverIndex[] PROGMEM = R"(
 )";
 const char* mqttClientId = "esp8266_01";
 const char* TopicReset = "esp8266_01/reset";
-const int ONE_WIRE_BUS = D4;
+const int ONE_WIRE_BUS = 4;
 File configFile;
 
 bool shouldSaveConfig = false;
@@ -101,12 +101,13 @@ const int PAYLOAD_SIZE = 200;
 
 float Celsius = 0;
 unsigned long tempoAnterior = 0;
+size_t freeSpace;
 // ***************************************** OBJETOS GLOBAIS ************************************************
 WiFiManager wifiManager;
 
 WiFiClient espWifiClient;
 PubSubClient mqttClient(espWifiClient);
-ESP8266WebServer server(80);
+WebServer server(80);
 
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature ds18b20(&oneWire);
@@ -198,11 +199,16 @@ bool getConfigFile() {
   return (configFile = SPIFFS.open("/config.json", "r")) ? true : false;
 }
 
+void SPIFFSFormat() {
+    SPIFFS.remove("/config.json");
+}
+
+
 void resetConfigurations(int opcao) {
   Serial.println("Resetando configurações...");
   switch (opcao) {
     case 1:
-      SPIFFS.format();
+      SPIFFSFormat();
       wifiManager.resetSettings();
       break;
     case 2:
@@ -279,7 +285,7 @@ void setUpAP() {
   wifiManager.addParameter(&Interval);
 
 
-  if (!wifiManager.autoConnect("ESP8266")) {
+  if (!wifiManager.autoConnect("ESP32")) {
     ESP.restart();
   }
 
@@ -386,16 +392,10 @@ void handleFileUpload() {
   HTTPUpload& upload = server.upload();
 
   if (upload.status == UPLOAD_FILE_START) {
-    Serial.printf("Atualizando: %s\n", upload.filename.c_str());
+    Serial.printf("Iniciando atualização: %s\n", upload.filename.c_str());
 
-    size_t freeSpace = ESP.getFreeSketchSpace();
+    freeSpace = ESP.getFreeSketchSpace();
     Serial.printf("Espaço livre para OTA: %u bytes\n", freeSpace);
-
-    if (freeSpace < upload.contentLength) {
-      Serial.println("Erro: Espaço insuficiente para atualização OTA!");
-      server.send(400, "text/plain", "Erro: Espaço insuficiente para atualização OTA!");
-      return;
-    }
 
     if (!Update.begin(freeSpace)) {
       Serial.print("Erro ao iniciar atualização: ");
@@ -403,20 +403,18 @@ void handleFileUpload() {
       server.send(500, "text/plain", "Erro ao iniciar atualização!");
       return;
     }
-  } 
-  
-  else if (upload.status == UPLOAD_FILE_WRITE) {
+  } else if (upload.status == UPLOAD_FILE_WRITE) {
     if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
       Serial.print("Erro ao escrever na flash: ");
       Update.printError(Serial);
       server.send(500, "text/plain", "Erro ao gravar na flash!");
       return;
     }
-  } 
-  
+  }
+
   else if (upload.status == UPLOAD_FILE_END) {
     if (Update.end(true)) {
-      Serial.printf("Sucesso no update de firmware: %u bytes gravados\nReiniciando ESP8266...\n", upload.totalSize);
+      Serial.printf("Atualização concluída: %u bytes gravados\n", upload.totalSize);
       server.send(200, "text/plain", "Atualização concluída! Reiniciando...");
       delay(1000);
       ESP.restart();
