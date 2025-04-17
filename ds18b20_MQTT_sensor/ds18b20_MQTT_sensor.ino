@@ -1,4 +1,4 @@
-/*
+/*n
  * Programa que efetua a leitura de um sensor de temperatura DS18B20 e envia para o servidor MQTT Broker.
  * Desenvolvido por Tiago Oliveira, Danilo Sovano e Dionne Monteiro.
  * Data: 04/03/2025
@@ -11,6 +11,7 @@
 
 // *********************************************** BIBLIOTECAS *********************************************
 #include <Arduino.h>
+#include <FS.h>
 #include <SPIFFS.h>
 #include <ArduinoJson.h>
 #include <WiFiManager.h>
