@@ -33,8 +33,8 @@ int DELAY = 0;
 char delayStr[10];
 
 
-const char* mqttClientId = "esp8266_01";
-const char* TopicReset = "esp8266_01/reset";
+const char* mqttClientId = "esp32_01";
+const char* TopicReset = "esp32_01/reset";
 const int ONE_WIRE_BUS = 4;
 File configFile;
 
