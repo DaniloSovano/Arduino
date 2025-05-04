@@ -326,9 +326,18 @@ void handleRoot() {
 }
 
 void handleUpdate() {
-  server.send(200, "text/plain", (Update.hasError()) ? "FAIL" : "OK");
+  String message = Update.hasError() ? "<h2>Erro na atualização!</h2>" : "<h2>Atualização concluída com sucesso!</h2>";
+  server.send(200, "text/html", message);
+  delay(1000);
   ESP.restart();
 }
+
+void handleRestart() {
+  server.send(200, "text/html", "<p>Reiniciando o ESP...</p>");
+  delay(1000);
+  ESP.restart();
+}
+
 
 void handleFileUpload() {
   HTTPUpload& upload = server.upload();
@@ -343,6 +352,7 @@ void handleFileUpload() {
       Serial.print("Erro ao iniciar atualização: ");
       Update.printError(Serial);
       server.send(500, "text/plain", "Erro ao iniciar atualização!");
+      delay(1000);
       return;
     }
   } else if (upload.status == UPLOAD_FILE_WRITE) {
@@ -350,6 +360,7 @@ void handleFileUpload() {
       Serial.print("Erro ao escrever na flash: ");
       Update.printError(Serial);
       server.send(500, "text/plain", "Erro ao gravar na flash!");
+      delay(1000);
       return;
     }
   }
@@ -364,6 +375,7 @@ void handleFileUpload() {
       Serial.print("Erro ao finalizar atualização: ");
       Update.printError(Serial);
       server.send(500, "text/plain", "Erro ao finalizar atualização!");
+      delay(1000);
     }
   }
 }
@@ -374,6 +386,7 @@ void iniciarOTA() {
   Serial.println(WiFi.localIP());
   server.on("/", HTTP_GET, handleRoot);
   server.on("/update", HTTP_POST, handleUpdate, handleFileUpload);
+  server.on("/restart", HTTP_POST, handleRestart); 
 
   server.begin();
 }
