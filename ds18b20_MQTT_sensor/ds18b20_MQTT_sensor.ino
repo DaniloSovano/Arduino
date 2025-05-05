@@ -337,7 +337,17 @@ void handleRestart() {
   delay(1000);
   ESP.restart();
 }
+void handleOTAUpdateTimeout(unsigned long timeout) {
+  unsigned long startTime = millis(); 
 
+  while ((millis() - startTime < timeout) || Update.isRunning()){
+    server.handleClient();  
+  }
+
+  Serial.println("Tempo limite de OTA atingido. Reiniciando ESP...");
+  delay(1000);
+  ESP.restart();
+}
 
 void handleFileUpload() {
   HTTPUpload& upload = server.upload();
@@ -403,7 +413,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 
   Serial.print("Mensagem: ");
   Serial.println(message);
-
+  
   if (message == "RFS") {
     Serial.println("Reset do SPIFFS acionado remotamente.");
     resetConfigurations(1);
@@ -427,10 +437,9 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
       Serial.println("Erro: Nenhum valor de delay foi recebido.");
     }
   } else if (message == "UPDATE") {
-    iniciarOTA();
-    while (1) {
-      server.handleClient();
-    }
+  unsigned long timeout = 180000;
+  iniciarOTA();
+  handleOTAUpdateTimeout(timeout);
   } else {
     Serial.println("Opção de reset inválida");
   }

@@ -54,13 +54,8 @@ const char serverIndex[] = R"(
             }
         </style>
         <script type='text/javascript'>
-            function validateForm() {
-                var fileInput = document.getElementsByName('update')[0];
-                if (!fileInput.files.length) {
-                    alert('Por favor, selecione um arquivo .bin para atualizar.');
-                    return false;
-                }
-                return true;
+            function updateMessage() {
+                document.getElementById('status').innerHTML = 'Tempo limite de OTA atingido. Reiniciando o ESP...';
             }
         </script>
     </head>
@@ -72,10 +67,16 @@ const char serverIndex[] = R"(
             <input type='submit' value='Atualizar Firmware'>
         </form>
 
-        <!-- Botão de Sair corrigido -->
-        <form method='POST' action='/restart' onsubmit='return confirm('Você realmente deseja sair? O ESP será reiniciado.')'>
+        <form method='POST' action='/restart' onsubmit='return confirm("Você realmente deseja sair? O ESP será reiniciado.")'>
             <input type='submit' value='Sair'>
         </form>
+
+        <h2 id="status"></h2>
+
+        <script type="text/javascript">
+            setTimeout(updateMessage, 180000);  
+        </script>
     </body>
     </html>
 )";
+
