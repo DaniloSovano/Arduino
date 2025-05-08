@@ -57,6 +57,15 @@ const char serverIndex[] = R"(
             function updateMessage() {
                 document.getElementById('status').innerHTML = 'Tempo limite de OTA atingido. Reiniciando o ESP...';
             }
+
+            function validateForm() {
+                const fileInput = document.querySelector("input[type='file']");
+                if (!fileInput.files.length) {
+                    alert("Por favor, selecione um arquivo para atualizar.");
+                    return false;
+                }
+                return true;
+            }
         </script>
     </head>
     <body>
@@ -79,4 +88,3 @@ const char serverIndex[] = R"(
     </body>
     </html>
 )";
-
