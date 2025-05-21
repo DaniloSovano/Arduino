@@ -12,12 +12,16 @@ void setup() {
 }
 void loop() {
   
-  
+  float temp = ds18b20_getTemp(oneWire);
   ds18b20.requestTemperatures();
   Celsius = ds18b20.getTempCByIndex(0);
-
+  
   Serial.print("Dallas Celsius: ");
   Serial.println(Celsius); 
+
+  Serial.print("Ds18b20 Celsius: ");
+  Serial.println(temp); 
+
   delay(3000);
 
 }
