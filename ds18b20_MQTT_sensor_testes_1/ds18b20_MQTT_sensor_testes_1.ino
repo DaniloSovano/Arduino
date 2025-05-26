@@ -1,8 +1,8 @@
-/*
+/*n
  * Programa que efetua a leitura de um sensor de temperatura DS18B20 e envia para o servidor MQTT Broker.
  * Desenvolvido por Tiago Oliveira, Danilo Sovano e Dionne Monteiro.
  * Data: 04/03/2025
- * Atualizado em: 01/04/2025
+ * Atualizado em: 15/05/2025
  * 
  * Para alterar as configurações de WiFI e Servidor MQTT, acesse o AP (Access Point) no seu dispositivo.
  * Para alterar o pino de sinal do Sensor DS18b20, troque o valor da variável ONE_WIRE_BUS
@@ -11,7 +11,8 @@
 
 // *********************************************** BIBLIOTECAS *********************************************
 #include <Arduino.h>
-#include <SPIFFS.h>
+#include <FS.h>
+#include <LittleFS.h>
 #include <ArduinoJson.h>
 #include <WiFiManager.h>
 #include <PubSubClient.h>
@@ -32,8 +33,9 @@ int DELAY = 0;
 char delayStr[10];
 
 
-const char* mqttClientId = "esp8266_01";
-const char* TopicReset = "esp8266_01/reset";
+const char* mqttClientId;
+String clientIdStr;
+const char* TopicReset = "sensor_06/reset";
 const int ONE_WIRE_BUS = 4;
 File configFile;
 
@@ -55,16 +57,15 @@ DallasTemperature ds18b20(&oneWire);
 
 // ***************************************** DECLARAÇÕES DE FUNÇÃO ************************************************
 bool isThereExistingSettings();                // Retorna se o ESP já tem configurações existentes
-bool isThereJsonSPIFFS();                      // Retorna se o arquivo config.json existe
+bool isThereJsonLittleFS();                      // Retorna se o arquivo config.json existe
 bool getConfigFile();                          // Retorna true se o arquivo config.json foi aberto com sucesso
 charArray createBuf(size_t);                   // Cria um buffer para armazenar as configurações de config.json
 void fillBuf(charArray&, size_t);              // Preenche o buffer com as configurações de config.json
 void setUpExistingSettings(const charArray&);  // Passa as configurações do buffer para as variáveis do código
 void loadExistingSettings();                   // Configura o ESP com as configurações existentes chamando outras funções envolvidas
-void resetConfigurations(int);                 // Função reseta as configurações do wifi manager e do SPIFFS ao ser chamada
+void resetConfigurations(int);                 // Função reseta as configurações do wifi manager e do LittleFS ao ser chamada
 
 void saveConfigCallback();
-void saveConfig();               // Função chamada quando o usuário salva as informações no WiFi Manager
 void setUpAP();                  // Configura WiFi Manager
 void saveConfig();               // Salva configurações recebidas pelo WiFi Manager no arquivo config.json
 void updateDelay(int newDelay);  // Função que altera o delay entre as medições a partir de uma mensagem mqtt
@@ -120,28 +121,28 @@ void loop() {
 
 // ***************************************** DEFINIÇÕES DE FUNÇÃO ************************************************
 bool isThereExistingSettings() {
-  if (SPIFFS.begin()) return isThereJsonSPIFFS();
+  if (LittleFS.begin(true)) return isThereJsonLittleFS();
   Serial.println("isThereExistingSettings: Falha ao iniciar SPIFSS");
   return false;
 }
 
-bool isThereJsonSPIFFS() {
+bool isThereJsonLittleFS() {
 
-  if (SPIFFS.exists("/config.json")) {
-    Serial.println("isThereJsonSPIFFS: Encontrado arquivo de configuração");
+  if (LittleFS.exists("/config.json")) {
+    Serial.println("isThereJsonLittleFS: Encontrado arquivo de configuração");
     return true;
   } else {
-    Serial.println("isThereJsonSPIFFS: Não foi encontrado arquivo de configuração");
+    Serial.println("isThereJsonLittleFS: Não foi encontrado arquivo de configuração");
     return false;
   }
 }
 
 bool getConfigFile() {
-  return (configFile = SPIFFS.open("/config.json", "r")) ? true : false;
+  return (configFile = LittleFS.open("/config.json", "r")) ? true : false;
 }
 
-void SPIFFSFormat() {
-    SPIFFS.remove("/config.json");
+void LittleFSFormat() {
+    LittleFS.remove("/config.json");
 }
 
 
@@ -149,7 +150,7 @@ void resetConfigurations(int opcao) {
   Serial.println("Resetando configurações...");
   switch (opcao) {
     case 1:
-      SPIFFSFormat();
+      LittleFSFormat();
       wifiManager.resetSettings();
       break;
     case 2:
@@ -206,6 +207,17 @@ void loadExistingSettings() {
   }
 }
 
+void setMacaddress() {
+  String mac = WiFi.macAddress(); 
+  mac.replace(":", "");           
+
+  clientIdStr = "ESP32-" + mac;   
+  mqttClientId = clientIdStr.c_str(); 
+
+  Serial.print("Client ID: ");
+  Serial.println(mqttClientId);
+}
+
 void setUpAP() {
   Serial.println("setUpAP: Criando AP para configuração....");
 
@@ -248,10 +260,6 @@ void saveConfigCallback() {
 }
 
 void saveConfig() {
-  if (!SPIFFS.begin()) {
-    Serial.println("saveConfig: Falha ao iniciar SPIFFS");
-    return;
-  }
   JsonDocument json;
   json["Broker"] = MQTTBroker;
   json["Topico"] = TOPIC;
@@ -259,7 +267,7 @@ void saveConfig() {
   json["Serial_Number"] = SERIAL_NUM;
   json["Delay"] = DELAY;
 
-  File configFile = SPIFFS.open("/config.json", );
+  File configFile = LittleFS.open("/config.json", "w");
   if (configFile) {
     serializeJson(json, configFile);
     configFile.close();
@@ -268,7 +276,9 @@ void saveConfig() {
 
 void mqttReconnect() {
   Serial.print("Conectando ao MQTT...");
-
+  
+  setMacaddress();
+  
   while (!mqttClient.connected()) {
 
     if (mqttClient.connect(mqttClientId)) {
@@ -329,7 +339,26 @@ void handleRoot() {
 }
 
 void handleUpdate() {
-  server.send(200, "text/plain", (Update.hasError()) ? "FAIL" : "OK");
+  String message = Update.hasError() ? "<h2>Erro na atualização!</h2>" : "<h2>Atualização concluída com sucesso!</h2>";
+  server.send(200, "text/html", message);
+  delay(1000);
+  ESP.restart();
+}
+
+void handleRestart() {
+  server.send(200, "text/html", "<p>Reiniciando o ESP...</p>");
+  delay(1000);
+  ESP.restart();
+}
+void handleOTAUpdateTimeout(unsigned long timeout) {
+  unsigned long startTime = millis(); 
+
+  while ((millis() - startTime < timeout) || Update.isRunning()){
+    server.handleClient();  
+  }
+
+  Serial.println("Tempo limite de OTA atingido. Reiniciando ESP...");
+  delay(1000);
   ESP.restart();
 }
 
@@ -346,6 +375,7 @@ void handleFileUpload() {
       Serial.print("Erro ao iniciar atualização: ");
       Update.printError(Serial);
       server.send(500, "text/plain", "Erro ao iniciar atualização!");
+      delay(1000);
       return;
     }
   } else if (upload.status == UPLOAD_FILE_WRITE) {
@@ -353,6 +383,7 @@ void handleFileUpload() {
       Serial.print("Erro ao escrever na flash: ");
       Update.printError(Serial);
       server.send(500, "text/plain", "Erro ao gravar na flash!");
+      delay(1000);
       return;
     }
   }
@@ -367,6 +398,7 @@ void handleFileUpload() {
       Serial.print("Erro ao finalizar atualização: ");
       Update.printError(Serial);
       server.send(500, "text/plain", "Erro ao finalizar atualização!");
+      delay(1000);
     }
   }
 }
@@ -375,8 +407,11 @@ void handleFileUpload() {
 void iniciarOTA() {
   Serial.print("Ip para realizar a atualização: ");
   Serial.println(WiFi.localIP());
+  String ipString = WiFi.localIP().toString();  
+  mqttClient.publish(TOPIC, ipString.c_str());  
   server.on("/", HTTP_GET, handleRoot);
   server.on("/update", HTTP_POST, handleUpdate, handleFileUpload);
+  server.on("/restart", HTTP_POST, handleRestart); 
 
   server.begin();
 }
@@ -393,9 +428,9 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 
   Serial.print("Mensagem: ");
   Serial.println(message);
-
+  
   if (message == "RFS") {
-    Serial.println("Reset do SPIFFS acionado remotamente.");
+    Serial.println("Reset do LittleFS acionado remotamente.");
     resetConfigurations(1);
     Serial.println("Reinicializando Esp...");
     ESP.restart();
@@ -417,10 +452,9 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
       Serial.println("Erro: Nenhum valor de delay foi recebido.");
     }
   } else if (message == "UPDATE") {
-    iniciarOTA();
-    while (1) {
-      server.handleClient();
-    }
+  unsigned long timeout = 180000;
+  iniciarOTA();
+  handleOTAUpdateTimeout(timeout);
   } else {
     Serial.println("Opção de reset inválida");
   }
