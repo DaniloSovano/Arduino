@@ -77,6 +77,7 @@ struct RuntimeData {
   float temperatureCelsius;
   unsigned long previousSendMillis = 0;
   unsigned long previousMeasureMillis = 0;
+  unsigned long previousMqttReconnectMillis = 0;
   size_t otaFreeSpace = 0;
 } runTimeData;
 
@@ -153,9 +154,15 @@ void setup() {
 void loop() {
   unsigned long currentMillis = millis();
 
+  // Bloco de reconexão MQTT
   if (!mqttClient.connected()) {
-    mqttReconnect();
+    if (currentMillis - runTimeData.previousMqttReconnectMillis >= 20000) { 
+      runTimeData.previousMqttReconnectMillis = currentMillis;
+      Serial.println("MQTT Desconectado. Tentando reconectar...");
+      mqttReconnect();
+    }
   }
+
   mqttClient.loop();
 
   // Bloco de medição
@@ -165,26 +172,23 @@ void loop() {
     ds18b20.requestTemperatures();
     runTimeData.temperatureCelsius = ds18b20.getTempCByIndex(0);
 
-    Serial.printf("Temperatura: %f", runTimeData.temperatureCelsius);
-    Serial.println(runTimeData.temperatureCelsius);
+    Serial.printf("Temperatura: %.2f °C\n", runTimeData.temperatureCelsius);
   }
 
-  //Bloco de envio
+  // Bloco de envio 
   if (currentMillis - runTimeData.previousSendMillis >= mqttConfig.intervalDelay) {
     runTimeData.previousSendMillis = currentMillis;
 
     if (!isnan(runTimeData.temperatureCelsius) && runTimeData.temperatureCelsius != DEVICE_DISCONNECTED_C) {
       
-      charArray payload = createJson_Temp(runTimeData.temperatureCelsius);
-
-      Serial.print("Payload: ");
-      Serial.print(payload.get());
-
       if (mqttClient.connected()) {
+        charArray payload = createJson_Temp(runTimeData.temperatureCelsius);
+        Serial.print("Payload: ");
+        Serial.print(payload.get());
         Serial.println(" Status: Online. Enviando...");
         mqttClient.publish(mqttConfig.topic, payload.get());
       } else {
-        Serial.println(" Status: Offline. Dados não enviados.");
+        Serial.println(" Status: Offline. Dados não enviados, aguardando conexão.");
       }
 
     } else {
@@ -347,18 +351,19 @@ void saveConfig() {
 }
 
 void mqttReconnect() {
-  Serial.print("Conectando ao MQTT...");
+  Serial.print("Tentando conectar ao MQTT...");
   
   setMacaddress();
   
-  while (!mqttClient.connected()) {
-    if (mqttClient.connect(mqttConfig.clientId)) {
-      Serial.println("Conectado!");
-      showMQTTSettings();
-    } else {
-      int errorCode = mqttClient.state();
-      showMQTTError(errorCode);
-    }
+  // A MUDANÇA É TROCAR 'while' POR 'if'
+  if (mqttClient.connect(mqttConfig.clientId)) {
+    Serial.println("Conectado!");
+    // Reinscreve no tópico após a reconexão
+    mqttClient.subscribe(mqttConfig.topicReset);
+    showMQTTSettings();
+  } else {
+    int errorCode = mqttClient.state();
+    showMQTTError(errorCode);
   }
 }
 
